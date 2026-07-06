@@ -134,14 +134,73 @@
   details.bulk { margin:14px 0; }
   details.bulk summary { cursor:pointer; font-weight:700; color:#8A7BA0; font-size:14px; }
   .divider { border:none; border-top:2px dashed #F2E7FA; margin:20px 0; }
-  @media (prefers-reduced-motion: reduce) { .kb-hot, .cheer, .sparkle, body.shake { animation:none; } }
+  /* --- プレイヤー選択 --- */
+  .player-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:14px; margin-top:18px; }
+  .player-item {
+    border:3px solid #F2E7FA; border-radius:22px; padding:20px 14px;
+    cursor:pointer; background:#FDFBFF; text-align:center;
+    font-family:inherit; color:inherit;
+    transition: transform .1s, border-color .1s;
+  }
+  .player-item:hover, .player-item:focus-visible { transform: translateY(-3px); border-color:#FF7BAC; outline:none; }
+  .player-item .avatar { font-size:46px; }
+  .player-item .pname { font-size:17px; font-weight:900; margin-top:6px; }
+  .player-badge-line { font-size:14px; color:#8A7BA0; margin-top:4px; }
+  .who-chip {
+    display:inline-flex; align-items:center; gap:6px;
+    background:#FFF0F6; border:2px solid #FFC9DE; color:#E05A8E;
+    border-radius:999px; padding:6px 14px; font-weight:700; font-size:14px; cursor:pointer;
+  }
+  /* --- 記録・バッジ --- */
+  .newrecord {
+    background:linear-gradient(90deg,#FFD653,#FF7BAC); color:white;
+    border-radius:16px; padding:10px 16px; display:inline-block;
+    font-weight:900; font-size:18px; margin:6px 0;
+    animation: recordPop .6s ease-out;
+  }
+  @keyframes recordPop { 0%{transform:scale(.5); opacity:0} 60%{transform:scale(1.15)} 100%{transform:scale(1); opacity:1} }
+  .badge-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); gap:12px; margin-top:14px; }
+  .badge {
+    border-radius:18px; padding:14px 8px; text-align:center;
+    border:2px solid #F2E7FA; background:#FDFBFF;
+  }
+  .badge.got { border-color:#FFD653; background:#FFFBEA; }
+  .badge.locked { opacity:.45; filter:grayscale(1); }
+  .badge .bemoji { font-size:34px; }
+  .badge .bname { font-size:12px; font-weight:700; margin-top:4px; }
+  .badge .bdesc { font-size:10px; color:#8A7BA0; margin-top:2px; }
+  .badge-pop {
+    position:fixed; top:20%; left:50%; transform:translateX(-50%);
+    background:white; border:3px solid #FFD653; border-radius:22px;
+    padding:18px 26px; text-align:center; z-index:60;
+    box-shadow:0 10px 30px rgba(120,90,160,.25);
+    animation: badgePop 2.4s ease-out forwards;
+  }
+  @keyframes badgePop {
+    0%{transform:translate(-50%,20px) scale(.6); opacity:0}
+    12%{transform:translate(-50%,0) scale(1.1); opacity:1}
+    20%{transform:translate(-50%,0) scale(1)}
+    85%{opacity:1}
+    100%{opacity:0; transform:translate(-50%,-10px) scale(1)}
+  }
+  .badge-pop .bp-emoji { font-size:48px; }
+  .badge-pop .bp-title { font-weight:900; font-size:16px; color:#E0A020; margin-top:4px; }
+  .badge-pop .bp-name { font-weight:700; margin-top:2px; }
+  .record-table { width:100%; border-collapse:collapse; margin-top:12px; font-size:14px; }
+  .record-table th, .record-table td { padding:8px 10px; text-align:center; border-bottom:2px solid #F2E7FA; }
+  .record-table th { color:#8A7BA0; font-size:12px; }
+  .record-table td.who { font-weight:900; text-align:left; }
+  .record-table .best { color:#FF7BAC; font-weight:900; }
+  .mini-players { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; }
+  @media (prefers-reduced-motion: reduce) { .kb-hot, .cheer, .sparkle, body.shake, .newrecord, .badge-pop { animation:none; } }
 </style>
 </head>
 <body>
 
 <div class="topbar">
   <div class="title">タイピング<span>ぼうけん</span> ⌨️✨</div>
-  <div style="display:flex; gap:8px;">
+  <div style="display:flex; gap:8px; align-items:center;">
+    <span id="who-indicator"></span>
     <button class="btn ghost" id="sound-btn"></button>
     <button class="btn ghost" id="home-btn" style="display:none;">🏠 もどる</button>
   </div>
@@ -390,6 +449,19 @@ function loadCats() {
   return cats;
 }
 
+/* ================= バッジ定義 ================= */
+const BADGES = [
+  { id: "first",    emoji: "🌱", name: "はじめの いっぽ", desc: "1かい クリア",   check: st => st.clears >= 1 },
+  { id: "clear10",  emoji: "🔟", name: "10かい たっせい", desc: "10かい クリア",  check: st => st.clears >= 10 },
+  { id: "clear50",  emoji: "🏆", name: "たいぴんぐ たつじん", desc: "50かい クリア", check: st => st.clears >= 50 },
+  { id: "words100", emoji: "💯", name: "100もん マスター", desc: "ことば 100こ",  check: st => st.totalWords >= 100 },
+  { id: "words500", emoji: "🌟", name: "500もん スター",   desc: "ことば 500こ",  check: st => st.totalWords >= 500 },
+  { id: "perfect",  emoji: "✨", name: "パーフェクト",      desc: "ミス0で クリア",  check: st => st.perfects >= 1 },
+  { id: "perfect10",emoji: "👑", name: "パーフェクト10",   desc: "ミス0を 10かい", check: st => st.perfects >= 10 },
+  { id: "combo20",  emoji: "🔥", name: "コンボ20",         desc: "コンボ20 たっせい", check: st => st.bestCombo >= 20 },
+  { id: "combo50",  emoji: "⚡", name: "コンボ50",         desc: "コンボ50 たっせい", check: st => st.bestCombo >= 50 },
+];
+
 /* ================= 状態 ================= */
 const S = {
   screen: "home",
@@ -403,11 +475,34 @@ const S = {
   gasUrl: store.get("typing-gas-url", ""),
   syncState: "off",   // off | syncing | ok | error
   lastSync: null,
+  players: store.get("typing-players", []),      // [{id,name,emoji}]
+  records: store.get("typing-records", {}),      // { playerId: { stats..., best: {catId:{sec,acc}} } }
+  currentPlayer: null,                            // 起動時に選ぶ
+  newBadges: [],                                  // 今回獲得したバッジ(演出用)
 };
 
 function saveCats(opts) {
   store.set("typing-cats-v2", S.cats);
   if (!opts || opts.sync !== false) scheduleSync();
+}
+function savePlayers(opts) {
+  store.set("typing-players", S.players);
+  if (!opts || opts.sync !== false) scheduleSync();
+}
+function saveRecords(opts) {
+  store.set("typing-records", S.records);
+  if (!opts || opts.sync !== false) scheduleSync();
+}
+
+/* プレイヤーの記録を取得(なければ初期化) */
+function statsOf(playerId) {
+  if (!S.records[playerId]) {
+    S.records[playerId] = { clears: 0, totalWords: 0, perfects: 0, bestCombo: 0, badges: [], best: {} };
+  }
+  const st = S.records[playerId];
+  if (!st.best) st.best = {};
+  if (!st.badges) st.badges = [];
+  return st;
 }
 
 /* ================= かぞく同期(GAS) =================
@@ -440,13 +535,36 @@ async function fetchFromGas() {
   return JSON.parse(text);
 }
 
+/* サーバーの記録と自分の記録を「良い方」でマージ */
+function mergeRecords(serverRecords) {
+  const out = JSON.parse(JSON.stringify(serverRecords || {}));
+  for (const pid of Object.keys(S.records)) {
+    const mine = S.records[pid];
+    const srv = out[pid] || { clears: 0, totalWords: 0, perfects: 0, bestCombo: 0, badges: [], best: {} };
+    srv.clears = Math.max(srv.clears || 0, mine.clears || 0);
+    srv.totalWords = Math.max(srv.totalWords || 0, mine.totalWords || 0);
+    srv.perfects = Math.max(srv.perfects || 0, mine.perfects || 0);
+    srv.bestCombo = Math.max(srv.bestCombo || 0, mine.bestCombo || 0);
+    srv.badges = Array.from(new Set([...(srv.badges || []), ...(mine.badges || [])]));
+    srv.best = srv.best || {};
+    for (const cid of Object.keys(mine.best || {})) {
+      const mb = mine.best[cid], sb = srv.best[cid];
+      srv.best[cid] = sb
+        ? { sec: Math.min(sb.sec, mb.sec), acc: Math.max(sb.acc, mb.acc) }
+        : { sec: mb.sec, acc: mb.acc };
+    }
+    out[pid] = srv;
+  }
+  return out;
+}
+
 async function syncMerge(manual) {
   if (!S.gasUrl) return;
   S.syncState = "syncing";
-  if (S.screen === "editor") render();
+  if (S.screen === "editor" || S.screen === "records" || S.screen === "players") render();
   try {
-    // 1. 自分のことばをサーバーへ送る(追記マージ)
-    await postToGas({ action: "merge", cats: S.cats });
+    // 1. 自分のことば・なまえ・きろくをサーバーへ送る
+    await postToGas({ action: "merge", cats: S.cats, players: S.players, records: mergeRecords({}) });
     // 2. サーバーが処理する少しの間を待つ
     await new Promise(r => setTimeout(r, 600));
     // 3. 合流後の最新データを取得
@@ -457,6 +575,14 @@ async function syncMerge(manual) {
         S.cats = data.cats;
         if (!catById(S.editCatId)) S.editCatId = S.cats[0] && S.cats[0].id;
         saveCats({ sync: false });
+      }
+      if (Array.isArray(data.players) && data.players.length > 0) {
+        S.players = data.players;
+        savePlayers({ sync: false });
+      }
+      if (data.records && typeof data.records === "object") {
+        S.records = mergeRecords(data.records);
+        saveRecords({ sync: false });
       }
       S.syncState = "ok";
       S.lastSync = new Date();
@@ -556,12 +682,68 @@ const accuracy = g => {
 
 function endRound() {
   const g = S.game;
+  const sec = Math.max(1, Math.round((Date.now() - g.startTime) / 1000));
+  const acc = accuracy(g);
+  const wordsCleared = g.queue.length;
+  const isPerfect = g.misses === 0;
+
+  let isBestTime = false, isBestAcc = false;
+  S.newBadges = [];
+
+  if (S.currentPlayer) {
+    const st = statsOf(S.currentPlayer.id);
+    // 累計スタッツ
+    st.clears += 1;
+    st.totalWords += wordsCleared;
+    if (isPerfect) st.perfects += 1;
+    st.bestCombo = Math.max(st.bestCombo || 0, g.maxCombo);
+    // 作品ごとの自己ベスト(タイム短縮 or 正確さ向上で更新)
+    const prev = st.best[g.catId];
+    if (!prev) { isBestTime = true; isBestAcc = true; }
+    else {
+      if (sec < prev.sec) isBestTime = true;
+      if (acc > prev.acc) isBestAcc = true;
+    }
+    st.best[g.catId] = {
+      sec: prev ? Math.min(prev.sec, sec) : sec,
+      acc: prev ? Math.max(prev.acc, acc) : acc,
+    };
+    // バッジ判定
+    const owned = new Set(st.badges);
+    for (const b of BADGES) {
+      if (!owned.has(b.id) && b.check(st)) {
+        st.badges.push(b.id);
+        S.newBadges.push(b);
+      }
+    }
+    saveRecords();
+  }
+
   S.result = {
     catId: g.catId, levelName: g.setName,
-    hits: g.hits, misses: g.misses, acc: accuracy(g), maxCombo: g.maxCombo,
-    sec: Math.max(1, Math.round((Date.now() - g.startTime) / 1000)),
+    hits: g.hits, misses: g.misses, acc, maxCombo: g.maxCombo, sec,
+    isBestTime, isBestAcc, isPerfect, wordsCleared,
   };
   go("result");
+  // バッジ獲得の演出(あれば順番に)
+  if (S.newBadges.length) showBadgePops(S.newBadges);
+}
+
+function showBadgePops(badges) {
+  let i = 0;
+  const showNext = () => {
+    if (i >= badges.length) return;
+    const b = badges[i++];
+    const el = document.createElement("div");
+    el.className = "badge-pop";
+    el.innerHTML = '<div class="bp-emoji">' + b.emoji + "</div>" +
+      '<div class="bp-title">🎉 バッジ ゲット!</div>' +
+      '<div class="bp-name">' + esc(b.name) + "</div>";
+    fx.appendChild(el);
+    if (S.soundOn) { playTone(1319, 0.1, "triangle"); setTimeout(() => playTone(1568, 0.15, "triangle"), 100); }
+    setTimeout(() => { el.remove(); showNext(); }, 2500);
+  };
+  showNext();
 }
 
 function countHit(g) {
@@ -614,11 +796,20 @@ function goHome() { S.game = null; go("home"); }
 const app = document.getElementById("app");
 const soundBtn = document.getElementById("sound-btn");
 const homeBtn = document.getElementById("home-btn");
+const whoInd = document.getElementById("who-indicator");
 soundBtn.addEventListener("click", () => { S.soundOn = !S.soundOn; renderTopbar(); });
 homeBtn.addEventListener("click", goHome);
+whoInd.addEventListener("click", () => { if (S.currentPlayer) go("players"); });
 function renderTopbar() {
   soundBtn.textContent = S.soundOn ? "🔊 おと あり" : "🔇 おと なし";
-  homeBtn.style.display = S.screen === "home" ? "none" : "";
+  homeBtn.style.display = (S.screen === "home" || S.screen === "players") ? "none" : "";
+  if (S.currentPlayer && S.screen !== "players") {
+    whoInd.style.display = "";
+    whoInd.innerHTML = '<span class="who-chip">' + esc(S.currentPlayer.emoji) + " " + esc(S.currentPlayer.name) + " ▾</span>";
+  } else {
+    whoInd.style.display = "none";
+    whoInd.innerHTML = "";
+  }
 }
 
 function kbHTML(nextKey) {
@@ -636,6 +827,45 @@ function render() {
   renderTopbar();
   const g = S.game;
 
+  /* ===== だれが あそぶ? ===== */
+  if (S.screen === "players") {
+    app.innerHTML = '<div class="card">' +
+      '<p class="center" style="font-weight:700; font-size:17px;">だれが あそぶ?</p>' +
+      (S.players.length === 0
+        ? '<p class="empty-note">まだ だれも とうろくされてないよ。<br>したの らんで なまえを ついかしてね!</p>'
+        : '<div class="player-grid">' +
+            S.players.map(p => {
+              const st = S.records[p.id];
+              const badgeCount = st && st.badges ? st.badges.length : 0;
+              return '<button class="player-item" data-action="pickplayer" data-arg="' + esc(p.id) + '">' +
+                '<div class="avatar">' + esc(p.emoji) + "</div>" +
+                '<div class="pname">' + esc(p.name) + "</div>" +
+                '<div class="player-badge-line">🏅 ' + badgeCount + "こ</div>" +
+              "</button>";
+            }).join("") +
+          "</div>") +
+      '<hr class="divider">' +
+      '<p class="section-label">➕ なまえを ついか</p>' +
+      '<div class="editor-row">' +
+        '<input class="inp-word" id="inp-pname" placeholder="なまえ" maxlength="10">' +
+        '<input class="inp-emoji" id="inp-pemoji" placeholder="えもじ" maxlength="4">' +
+        '<button class="btn mint" data-action="addplayer">➕ ついか</button>' +
+      "</div>" +
+      (S.players.length > 0
+        ? '<div class="mini-players">' +
+            S.players.map(p =>
+              '<span class="who-chip" style="cursor:default;">' + esc(p.emoji) + " " + esc(p.name) +
+              ' <button class="del" data-action="delplayer" data-arg="' + esc(p.id) + '" style="width:22px;height:22px;min-width:22px;font-size:12px;">✕</button></span>'
+            ).join("") +
+          "</div>"
+        : "") +
+      '<p class="msg ' + (S.editorMsgType === "ok" ? "ok" : "err") + '">' + esc(S.editorMsg) + "</p>" +
+    "</div>";
+    const i = document.getElementById("inp-pname");
+    if (i) i.focus();
+    return;
+  }
+
   /* ===== ホーム ===== */
   if (S.screen === "home") {
     app.innerHTML = '<div class="card">' +
@@ -648,10 +878,50 @@ function render() {
         ).join("") +
       "</div>" +
       '<hr class="divider">' +
-      '<div class="center">' +
-        '<button class="btn yellow" data-action="editor">✏️ さくひん と ことばの へんしゅう</button>' +
+      '<div class="center" style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">' +
+        '<button class="btn" data-action="records">🏅 みんなの きろく</button>' +
+        '<button class="btn yellow" data-action="editor">✏️ へんしゅう</button>' +
       "</div>" +
       '<p class="hint">💡 「し」は shi でも si でも OK! すきな うちかたで だいじょうぶ</p>' +
+    "</div>";
+  }
+
+  /* ===== みんなの きろく ===== */
+  else if (S.screen === "records") {
+    const catsWithBest = S.cats;
+    app.innerHTML = '<div class="card">' +
+      '<p class="center" style="font-weight:700; font-size:17px;">🏅 みんなの きろく</p>' +
+      (S.players.length === 0
+        ? '<p class="empty-note">まだ だれも いないよ</p>'
+        : S.players.map(p => {
+            const st = S.records[p.id] || { badges: [], best: {}, clears: 0, totalWords: 0 };
+            const badges = st.badges || [];
+            const bestEntries = Object.keys(st.best || {})
+              .map(cid => { const c = catById(cid); return c ? { name: c.emoji + " " + c.name, ...st.best[cid] } : null; })
+              .filter(Boolean);
+            return '<div style="margin-bottom:24px;">' +
+              '<h3 style="font-size:18px; font-weight:900; margin-bottom:6px;">' + esc(p.emoji) + " " + esc(p.name) + "</h3>" +
+              '<p style="font-size:13px; color:#8A7BA0; margin-bottom:8px;">クリア ' + (st.clears || 0) + "かい / ことば " + (st.totalWords || 0) + "こ</p>" +
+              // バッジ
+              '<div class="badge-grid">' +
+                BADGES.map(b => {
+                  const got = badges.includes(b.id);
+                  return '<div class="badge ' + (got ? "got" : "locked") + '">' +
+                    '<div class="bemoji">' + b.emoji + "</div>" +
+                    '<div class="bname">' + esc(b.name) + "</div>" +
+                    '<div class="bdesc">' + esc(b.desc) + "</div></div>";
+                }).join("") +
+              "</div>" +
+              // 自己ベスト
+              (bestEntries.length
+                ? '<table class="record-table"><tr><th>さくひん</th><th>ベストタイム</th><th>せいかくさ</th></tr>' +
+                  bestEntries.map(e =>
+                    "<tr><td class='who'>" + esc(e.name) + "</td><td class='best'>" + e.sec + "びょう</td><td>" + e.acc + "%</td></tr>"
+                  ).join("") + "</table>"
+                : '<p style="font-size:13px; color:#B9AECB; margin-top:8px;">まだ きろくが ないよ</p>') +
+            "</div>";
+          }).join("")) +
+      '<div class="center" style="margin-top:10px;"><button class="btn big yellow" data-action="gohome">🏠 もどる</button></div>' +
     "</div>";
   }
 
@@ -683,9 +953,16 @@ function render() {
   /* ===== けっか ===== */
   else if (S.screen === "result" && S.result) {
     const r = S.result;
+    const recordLine =
+      (r.isBestTime || r.isBestAcc)
+        ? '<div class="newrecord">🎉 じぶんベスト こうしん!' +
+            (r.isBestTime ? " ⏱️はやさ" : "") + (r.isBestAcc ? " 🎯せいかくさ" : "") + "</div>"
+        : "";
     app.innerHTML = '<div class="card center">' +
       '<h2 style="font-size:22px; font-weight:900;">' + esc(r.levelName) + " クリア!</h2>" +
+      (r.isPerfect ? '<p style="color:#E0A020; font-weight:900; font-size:16px;">✨ ノーミス パーフェクト! ✨</p>' : "") +
       '<div class="result-stars">' + starsOf(r.acc) + "</div>" +
+      (recordLine ? '<div>' + recordLine + "</div>" : "") +
       '<div class="result-grid">' +
         '<div class="box"><b>' + r.sec + "びょう</b><span>かかった じかん</span></div>" +
         '<div class="box"><b>' + r.acc + "%</b><span>せいかくさ</span></div>" +
@@ -743,12 +1020,12 @@ function render() {
 
       '<p class="msg ' + (S.editorMsgType === "ok" ? "ok" : "err") + '">' + esc(S.editorMsg) + "</p>" +
 
-      '<div class="word-list">' +
+      '<div class="word-list" id="word-list">' +
         (cat.words.length === 0
           ? '<p class="empty-note">まだ ことばが ないよ</p>'
-          : cat.words.map((w, i) =>
-              '<div class="row"><span>' + esc(w.icon) + '</span><span class="w">' + esc(w.kana) + "</span>" +
-              '<button class="del" data-action="delword" data-arg="' + i + '">✕</button></div>'
+          : cat.words.map(w =>
+              '<div class="row" data-kana="' + esc(w.kana) + '"><span>' + esc(w.icon) + '</span><span class="w">' + esc(w.kana) + "</span>" +
+              '<button class="del" data-action="delword" data-arg="' + esc(w.kana) + '">✕</button></div>'
             ).join("")) +
       "</div>" +
 
@@ -874,6 +1151,34 @@ function deleteCategory(id) {
   }
 }
 
+/* ================= プレイヤー ================= */
+function addPlayer() {
+  const inpN = document.getElementById("inp-pname");
+  const inpE = document.getElementById("inp-pemoji");
+  if (!inpN) return;
+  const name = inpN.value.trim();
+  const emoji = inpE.value.trim() || "🙂";
+  if (!name) { setMsg("なまえを いれてね!"); render(); return; }
+  if (S.players.some(p => p.name === name)) { setMsg("その なまえは もう あるよ!"); render(); return; }
+  S.players.push({ id: "p-" + Date.now(), name, emoji });
+  savePlayers();
+  setMsg("「" + emoji + " " + name + "」を ついかしたよ!", "ok");
+  render();
+}
+
+function deletePlayer(id) {
+  const p = S.players.find(x => x.id === id);
+  if (!p) return;
+  if (!confirm("「" + p.name + "」を けすよ? きろくも きえちゃうよ!")) return;
+  S.players = S.players.filter(x => x.id !== id);
+  delete S.records[id];
+  if (S.currentPlayer && S.currentPlayer.id === id) S.currentPlayer = null;
+  savePlayers();
+  saveRecords();
+  setMsg("けしたよ!", "ok");
+  render();
+}
+
 /* ================= エクスポート / インポート ================= */
 function exportData() {
   const data = { app: "typing-bouken", version: 2, exportedAt: new Date().toISOString(), cats: S.cats };
@@ -946,6 +1251,14 @@ app.addEventListener("click", e => {
   if (action === "play") startWords(arg);
   else if (action === "editor") { setMsg(""); go("editor"); }
   else if (action === "gohome") goHome();
+  else if (action === "records") go("records");
+  else if (action === "pickplayer") {
+    S.currentPlayer = S.players.find(p => p.id === arg) || null;
+    setMsg("");
+    go("home");
+  }
+  else if (action === "addplayer") addPlayer();
+  else if (action === "delplayer") deletePlayer(arg);
   else if (action === "selcat") { S.editCatId = arg; setMsg(""); render(); }
   else if (action === "addcat") addCategory();
   else if (action === "addword") addCustomWord();
@@ -968,18 +1281,29 @@ app.addEventListener("click", e => {
   else if (action === "syncnow") syncMerge(true);
   else if (action === "delword") {
     const cat = catById(S.editCatId);
-    if (cat) {
-      const w = cat.words[Number(arg)];
-      cat.words.splice(Number(arg), 1);
-      saveCats({ sync: false });
-      setMsg("");
-      render();
-      if (w && S.gasUrl) {
-        apiDelete({ action: "deleteWord", catId: cat.id, kana: w.kana }).then(ok => {
-          if (!ok) setMsg("オフラインかも… オンラインのときに けさないと、どうきで もどってきちゃうよ");
-          render();
-        });
-      }
+    if (!cat) return;
+    const kana = arg;
+    // データから削除(kana基準なのでインデックスずれの心配なし)
+    cat.words = cat.words.filter(w => w.kana !== kana);
+    saveCats({ sync: false });
+    // 画面はその行だけスッと消す(全体を描き直さないのでスクロール位置そのまま)
+    const rowEl = btn.closest(".row");
+    if (rowEl) {
+      rowEl.style.transition = "opacity .15s";
+      rowEl.style.opacity = "0";
+      setTimeout(() => {
+        rowEl.remove();
+        const list = document.getElementById("word-list");
+        if (list && !list.querySelector(".row")) {
+          list.innerHTML = '<p class="empty-note">まだ ことばが ないよ</p>';
+        }
+      }, 150);
+    }
+    // サーバーにも「消したよ」を送る(トゥームストーンで復活を防ぐ)
+    if (S.gasUrl) {
+      apiDelete({ action: "deleteWord", catId: cat.id, kana: kana }).then(ok => {
+        if (!ok) { setMsg("オフラインかも… オンラインのときに もういちど けしてね"); }
+      });
     }
   }
 });
@@ -992,13 +1316,16 @@ app.addEventListener("change", e => {
   }
 });
 
-/* Enterキーでことば追加 */
+/* Enterキーでことば・なまえ追加 */
 app.addEventListener("keydown", e => {
   if (e.key !== "Enter") return;
   if (e.target.id === "inp-word" || e.target.id === "inp-emoji") { e.preventDefault(); addCustomWord(); }
   if (e.target.id === "inp-catname" || e.target.id === "inp-catemoji") { e.preventDefault(); addCategory(); }
+  if (e.target.id === "inp-pname" || e.target.id === "inp-pemoji") { e.preventDefault(); addPlayer(); }
 });
 
+/* 起動:プレイヤー未選択なら「だれがあそぶ?」から */
+S.screen = "players";
 render();
 if (S.gasUrl) syncMerge(false);
 </script>
