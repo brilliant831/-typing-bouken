@@ -389,6 +389,37 @@ const DEFAULT_CATS = [
       { kana: "あしたのえんそくがたのしみでねむれないよ", icon: "🎒" },
     ],
   },
+  {
+    id: "sumikko", name: "すみっコぐらし", emoji: "🐻", builtin: true,
+    words: [
+      { kana: "しろくま", icon: "🐻" }, { kana: "ねこ", icon: "🐱" },
+      { kana: "とんかつ", icon: "🍖" }, { kana: "ぺんぎんかしら", icon: "🐧" },
+      { kana: "とかげ", icon: "🦎" }, { kana: "ざっそう", icon: "🌿" },
+      { kana: "えびふらいのしっぽ", icon: "🍤" }, { kana: "ふろしき", icon: "🎁" },
+      { kana: "おばけ", icon: "👻" }, { kana: "やま", icon: "⛰️" },
+      { kana: "すみっこがだいすき", icon: "💕" }, { kana: "ほっこりすみっこぐらし", icon: "☕" },
+    ],
+  },
+  {
+    id: "chiikawa", name: "ちいかわ", emoji: "🐹", builtin: true,
+    words: [
+      { kana: "ちいかわ", icon: "🐹" }, { kana: "はちわれ", icon: "🐱" },
+      { kana: "うさぎ", icon: "🐰" }, { kana: "くりまんじゅう", icon: "🌰" },
+      { kana: "もも", icon: "🐿️" }, { kana: "えらいね", icon: "💪" },
+      { kana: "おいしいものたべたい", icon: "🍙" }, { kana: "うれしいな", icon: "😊" },
+      { kana: "こわいよう", icon: "😳" }, { kana: "がんばったね", icon: "🌟" },
+    ],
+  },
+  {
+    id: "princess", name: "プリンセス と まほう", emoji: "👑", builtin: true,
+    words: [
+      { kana: "おひめさま", icon: "👑" }, { kana: "まほうつかい", icon: "🪄" },
+      { kana: "きらきらどれす", icon: "✨" }, { kana: "ようせい", icon: "🧚" },
+      { kana: "にじいろのつばさ", icon: "🌈" }, { kana: "おしろ", icon: "🏰" },
+      { kana: "へんしん", icon: "💫" }, { kana: "ゆめのくに", icon: "🌙" },
+      { kana: "まほうのつえ", icon: "🪄" }, { kana: "ぱぱとままだいすき", icon: "💗" },
+    ],
+  },
   { id: "jibun", name: "じぶんの ことば", emoji: "💝", builtin: true, words: [] },
 ];
 
@@ -463,6 +494,24 @@ const BADGES = [
   { id: "combo50",  emoji: "⚡", name: "コンボ50",         desc: "コンボ50 たっせい", check: st => st.bestCombo >= 50 },
 ];
 
+/* ================= コレクション・きせかえ ================= */
+const ACCESSORIES = [
+  { id: "ribbon",  emoji: "🎀", name: "リボン",       need: 1 },
+  { id: "crown",   emoji: "👑", name: "かんむり",     need: 3 },
+  { id: "star",    emoji: "🌟", name: "きらぼし",     need: 5 },
+  { id: "sparkle", emoji: "✨", name: "きらきら",     need: 8 },
+  { id: "rainbow", emoji: "🌈", name: "にじ",         need: 12 },
+  { id: "unicorn", emoji: "🦄", name: "ゆにこーん",   need: 16 },
+];
+function collectionCount(st) {
+  return (st.badges ? st.badges.length : 0) + (st.clearedCats ? st.clearedCats.length : 0);
+}
+function avatarDisplay(p) {
+  const st = S.records[p.id];
+  const acc = st && st.equipped ? ACCESSORIES.find(a => a.id === st.equipped) : null;
+  return esc(p.emoji) + (acc ? " " + esc(acc.emoji) : "");
+}
+
 /* ================= 状態 ================= */
 const S = {
   screen: "home",
@@ -480,6 +529,7 @@ const S = {
   records: store.get("typing-records", {}),      // { playerId: { stats..., best: {catId:{sec,acc}} } }
   currentPlayer: null,                            // 起動時に選ぶ
   newBadges: [],                                  // 今回獲得したバッジ(演出用)
+  battleP1: null, battleP2: null, battleCat: null, battle: null, // きょうだいたいけつ用
 };
 
 function saveCats(opts) {
@@ -498,12 +548,38 @@ function saveRecords(opts) {
 /* プレイヤーの記録を取得(なければ初期化) */
 function statsOf(playerId) {
   if (!S.records[playerId]) {
-    S.records[playerId] = { clears: 0, totalWords: 0, perfects: 0, bestCombo: 0, badges: [], best: {} };
+    S.records[playerId] = {
+      clears: 0, totalWords: 0, perfects: 0, bestCombo: 0, badges: [], best: {},
+      clearedCats: [], equipped: null, dailyStreak: 0, lastDailyDate: "",
+    };
   }
   const st = S.records[playerId];
   if (!st.best) st.best = {};
   if (!st.badges) st.badges = [];
+  if (!st.clearedCats) st.clearedCats = [];
+  if (st.equipped === undefined) st.equipped = null;
+  if (!st.dailyStreak) st.dailyStreak = 0;
+  if (!st.lastDailyDate) st.lastDailyDate = "";
   return st;
+}
+
+/* ================= デイリーミッション ================= */
+function todayKey() {
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+function yesterdayKey() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+function dailyMissionCat() {
+  const playable = S.cats.filter(c => c.words.length > 0);
+  if (!playable.length) return null;
+  const key = todayKey();
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  return playable[hash % playable.length];
 }
 
 /* ================= かぞく同期(GAS) =================
@@ -681,18 +757,11 @@ const accuracy = g => {
   return total ? Math.round((g.hits / total) * 100) : 100;
 };
 
-function endRound() {
-  const g = S.game;
-  const sec = Math.max(1, Math.round((Date.now() - g.startTime) / 1000));
-  const acc = accuracy(g);
-  const wordsCleared = g.queue.length;
-  const isPerfect = g.misses === 0;
-
-  let isBestTime = false, isBestAcc = false;
-  S.newBadges = [];
-
-  if (S.currentPlayer) {
-    const st = statsOf(S.currentPlayer.id);
+/* プレイ結果をプレイヤーの記録に反映(バッジ・ステッカー・デイリーミッション込み) */
+function applyRoundStats(playerId, g, sec, acc, wordsCleared, isPerfect) {
+  let isBestTime = false, isBestAcc = false, newBadges = [], dailyDone = false, dailyStreak = 0;
+  if (playerId) {
+    const st = statsOf(playerId);
     // 累計スタッツ
     st.clears += 1;
     st.totalWords += wordsCleared;
@@ -714,20 +783,88 @@ function endRound() {
     for (const b of BADGES) {
       if (!owned.has(b.id) && b.check(st)) {
         st.badges.push(b.id);
-        S.newBadges.push(b);
+        newBadges.push(b);
       }
+    }
+    // コレクション(さくひん はじめてクリアで ステッカー)
+    if (!st.clearedCats.includes(g.catId)) {
+      st.clearedCats.push(g.catId);
+      const cat = catById(g.catId);
+      if (cat) newBadges.push({ emoji: cat.emoji, name: cat.name + " コレクション", desc: "はじめて クリア", isSticker: true });
+    }
+    // デイリーミッション
+    const mc = dailyMissionCat();
+    if (mc && g.catId === mc.id) {
+      const key = todayKey();
+      if (st.lastDailyDate !== key) {
+        st.dailyStreak = (st.lastDailyDate === yesterdayKey()) ? (st.dailyStreak || 0) + 1 : 1;
+        st.lastDailyDate = key;
+        dailyDone = true;
+      }
+      dailyStreak = st.dailyStreak || 0;
     }
     saveRecords();
   }
+  return { isBestTime, isBestAcc, newBadges, dailyDone, dailyStreak };
+}
+
+function endRound() {
+  const g = S.game;
+  const sec = Math.max(1, Math.round((Date.now() - g.startTime) / 1000));
+  const acc = accuracy(g);
+  const wordsCleared = g.queue.length;
+  const isPerfect = g.misses === 0;
+
+  if (g.battle) { endBattleStage(g, sec, acc, wordsCleared, isPerfect); return; }
+
+  const r = applyRoundStats(S.currentPlayer ? S.currentPlayer.id : null, g, sec, acc, wordsCleared, isPerfect);
+  S.newBadges = r.newBadges;
 
   S.result = {
     catId: g.catId, levelName: g.setName,
     hits: g.hits, misses: g.misses, acc, maxCombo: g.maxCombo, sec,
-    isBestTime, isBestAcc, isPerfect, wordsCleared,
+    isBestTime: r.isBestTime, isBestAcc: r.isBestAcc, isPerfect, wordsCleared,
+    dailyDone: r.dailyDone, dailyStreak: r.dailyStreak,
   };
   go("result");
   // バッジ獲得の演出(あれば順番に)
   if (S.newBadges.length) showBadgePops(S.newBadges);
+}
+
+/* ================= きょうだい たいけつ ================= */
+function startBattle() {
+  const cat = catById(S.battleCat);
+  if (!cat || !S.battleP1 || !S.battleP2) return;
+  const words = shuffle(cat.words).slice(0, Math.min(PLAY_COUNT, cat.words.length));
+  S.battle = { catId: cat.id, catName: cat.emoji + " " + cat.name, words, p1: S.battleP1, p2: S.battleP2, res1: null, res2: null };
+  startBattleStage(1);
+}
+function startBattleStage(stage) {
+  const b = S.battle;
+  const pid = stage === 1 ? b.p1 : b.p2;
+  const p = S.players.find(x => x.id === pid);
+  S.game = {
+    catId: b.catId, setName: b.catName, queue: b.words, wordPos: 0,
+    engine: newEngine(b.words[0].kana),
+    hits: 0, misses: 0, combo: 0, maxCombo: 0, startTime: Date.now(),
+    battle: true, battleStage: stage, battlePlayerName: esc(p.emoji) + " " + esc(p.name),
+  };
+  go("play");
+}
+function endBattleStage(g, sec, acc, wordsCleared, isPerfect) {
+  const b = S.battle;
+  const pid = g.battleStage === 1 ? b.p1 : b.p2;
+  const r = applyRoundStats(pid, g, sec, acc, wordsCleared, isPerfect);
+  const roundResult = { sec, acc, misses: g.misses, maxCombo: g.maxCombo, isPerfect, newBadges: r.newBadges };
+  if (g.battleStage === 1) {
+    b.res1 = roundResult;
+    go("battle-handoff");
+  } else {
+    b.res2 = roundResult;
+    go("battle-result");
+    const allBadges = [...(b.res1.newBadges || []), ...roundResult.newBadges];
+    if (allBadges.length) showBadgePops(allBadges);
+  }
 }
 
 function showBadgePops(badges) {
@@ -738,7 +875,7 @@ function showBadgePops(badges) {
     const el = document.createElement("div");
     el.className = "badge-pop";
     el.innerHTML = '<div class="bp-emoji">' + b.emoji + "</div>" +
-      '<div class="bp-title">🎉 バッジ ゲット!</div>' +
+      '<div class="bp-title">' + (b.isSticker ? "🎉 コレクション ゲット!" : "🎉 バッジ ゲット!") + "</div>" +
       '<div class="bp-name">' + esc(b.name) + "</div>";
     fx.appendChild(el);
     if (S.soundOn) { playTone(1319, 0.1, "triangle"); setTimeout(() => playTone(1568, 0.15, "triangle"), 100); }
@@ -806,7 +943,7 @@ function renderTopbar() {
   homeBtn.style.display = (S.screen === "home" || S.screen === "players") ? "none" : "";
   if (S.currentPlayer && S.screen !== "players") {
     whoInd.style.display = "";
-    whoInd.innerHTML = '<span class="who-chip">' + esc(S.currentPlayer.emoji) + " " + esc(S.currentPlayer.name) + " ▾</span>";
+    whoInd.innerHTML = '<span class="who-chip">' + avatarDisplay(S.currentPlayer) + " " + esc(S.currentPlayer.name) + " ▾</span>";
   } else {
     whoInd.style.display = "none";
     whoInd.innerHTML = "";
@@ -839,7 +976,7 @@ function render() {
               const st = S.records[p.id];
               const badgeCount = st && st.badges ? st.badges.length : 0;
               return '<button class="player-item" data-action="pickplayer" data-arg="' + esc(p.id) + '">' +
-                '<div class="avatar">' + esc(p.emoji) + "</div>" +
+                '<div class="avatar">' + avatarDisplay(p) + "</div>" +
                 '<div class="pname">' + esc(p.name) + "</div>" +
                 '<div class="player-badge-line">🏅 ' + badgeCount + "こ</div>" +
               "</button>";
@@ -855,7 +992,7 @@ function render() {
       (S.players.length > 0
         ? '<div class="mini-players">' +
             S.players.map(p =>
-              '<span class="who-chip" style="cursor:default;">' + esc(p.emoji) + " " + esc(p.name) +
+              '<span class="who-chip" style="cursor:default;">' + avatarDisplay(p) + " " + esc(p.name) +
               ' <button class="del" data-action="delplayer" data-arg="' + esc(p.id) + '" style="width:22px;height:22px;min-width:22px;font-size:12px;">✕</button></span>'
             ).join("") +
           "</div>"
@@ -869,7 +1006,19 @@ function render() {
 
   /* ===== ホーム ===== */
   if (S.screen === "home") {
+    const mc = dailyMissionCat();
+    const stHome = S.currentPlayer ? statsOf(S.currentPlayer.id) : null;
+    const doneToday = stHome && stHome.lastDailyDate === todayKey();
     app.innerHTML = '<div class="card">' +
+      (mc ? '<button class="menu-item" data-action="play" data-arg="' + esc(mc.id) + '" style="border-color:#FFD653; background:#FFFBEA; margin-bottom:16px;">' +
+        "<h3>📅 きょうの ミッション</h3>" +
+        "<p>" + esc(mc.emoji) + " " + esc(mc.name) + " で あそぼう!" +
+        (stHome
+          ? (doneToday
+              ? " ✅ きょう クリアずみ(れんぞく" + (stHome.dailyStreak || 0) + "にちめ)"
+              : (stHome.dailyStreak ? " 🔥 れんぞく" + stHome.dailyStreak + "にちちゅう!" : ""))
+          : "") +
+        "</p></button>" : "") +
       '<p class="center" style="font-weight:700; font-size:17px;">どの さくひんで あそぶ?</p>' +
       '<div class="menu-grid">' +
         S.cats.map(c =>
@@ -881,6 +1030,7 @@ function render() {
       '<hr class="divider">' +
       '<div class="center" style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">' +
         '<button class="btn" data-action="records">🏅 みんなの きろく</button>' +
+        '<button class="btn mint" data-action="battlesetup">⚔️ たいけつ</button>' +
         '<button class="btn yellow" data-action="editor">✏️ へんしゅう</button>' +
       "</div>" +
       '<p class="hint">💡 「し」は shi でも si でも OK! すきな うちかたで だいじょうぶ</p>' +
@@ -900,8 +1050,9 @@ function render() {
             const bestEntries = Object.keys(st.best || {})
               .map(cid => { const c = catById(cid); return c ? { name: c.emoji + " " + c.name, ...st.best[cid] } : null; })
               .filter(Boolean);
+            const isMe = S.currentPlayer && S.currentPlayer.id === p.id;
             return '<div style="margin-bottom:24px;">' +
-              '<h3 style="font-size:18px; font-weight:900; margin-bottom:6px;">' + esc(p.emoji) + " " + esc(p.name) + "</h3>" +
+              '<h3 style="font-size:18px; font-weight:900; margin-bottom:6px;">' + avatarDisplay(p) + " " + esc(p.name) + "</h3>" +
               '<p style="font-size:13px; color:#8A7BA0; margin-bottom:8px;">クリア ' + (st.clears || 0) + "かい / ことば " + (st.totalWords || 0) + "こ</p>" +
               // バッジ
               '<div class="badge-grid">' +
@@ -913,6 +1064,33 @@ function render() {
                     '<div class="bdesc">' + esc(b.desc) + "</div></div>";
                 }).join("") +
               "</div>" +
+              // さくひんコレクション(ステッカー)
+              '<p class="section-label" style="margin-top:16px;">📔 さくひん コレクション</p>' +
+              '<div class="badge-grid">' +
+                S.cats.map(c => {
+                  const got = (st.clearedCats || []).includes(c.id);
+                  return '<div class="badge ' + (got ? "got" : "locked") + '">' +
+                    '<div class="bemoji">' + esc(c.emoji) + "</div>" +
+                    '<div class="bname">' + esc(c.name) + "</div></div>";
+                }).join("") +
+              "</div>" +
+              // きせかえアクセサリー(自分だけ そうび できる)
+              (isMe
+                ? '<p class="section-label" style="margin-top:16px;">🎀 きせかえ アクセサリー(コレクション ' + collectionCount(st) + "こ)</p>" +
+                  '<div class="badge-grid">' +
+                    ACCESSORIES.map(a => {
+                      const unlocked = collectionCount(st) >= a.need;
+                      const equipped = st.equipped === a.id;
+                      return '<button class="badge ' + (unlocked ? "got" : "locked") +
+                        '" data-action="' + (unlocked ? "equipacc" : "") + '" data-arg="' + a.id +
+                        '" style="font-family:inherit; cursor:' + (unlocked ? "pointer" : "default") +
+                        (equipped ? "; outline:3px solid #FF7BAC;" : "") + '">' +
+                        '<div class="bemoji">' + a.emoji + "</div>" +
+                        '<div class="bname">' + esc(a.name) + (equipped ? " ✓" : "") + "</div>" +
+                        '<div class="bdesc">' + (unlocked ? "タップで そうび" : a.need + "こで かいほう") + "</div></button>";
+                    }).join("") +
+                  "</div>"
+                : "") +
               // 自己ベスト
               (bestEntries.length
                 ? '<table class="record-table"><tr><th>さくひん</th><th>ベストタイム</th><th>せいかくさ</th></tr>' +
@@ -933,6 +1111,7 @@ function render() {
     const guide = buildGuide(g.engine.units, g.engine.unitIdx, g.engine.buffer);
     const typed = g.engine.committed + g.engine.buffer;
     app.innerHTML = '<div class="card">' +
+      (g.battle ? '<p class="center" style="font-weight:900; color:#E05A8E; margin-bottom:8px;">⚔️ ' + g.battlePlayerName + " の ばん!</p>" : "") +
       '<div class="hud">' +
         '<div class="chip">' + esc(g.setName) + "</div>" +
         '<div class="chip">📖 ' + Math.min(g.wordPos + 1, g.queue.length) + " / " + g.queue.length + "</div>" +
@@ -964,6 +1143,9 @@ function render() {
       (r.isPerfect ? '<p style="color:#E0A020; font-weight:900; font-size:16px;">✨ ノーミス パーフェクト! ✨</p>' : "") +
       '<div class="result-stars">' + starsOf(r.acc) + "</div>" +
       (recordLine ? '<div>' + recordLine + "</div>" : "") +
+      (r.dailyDone
+        ? '<div class="newrecord" style="background:linear-gradient(90deg,#6EE7C8,#3FC7A4);">📅 きょうのミッション たっせい! れんぞく' + r.dailyStreak + "にちめ</div>"
+        : "") +
       '<div class="result-grid">' +
         '<div class="box"><b>' + r.sec + "びょう</b><span>かかった じかん</span></div>" +
         '<div class="box"><b>' + r.acc + "%</b><span>せいかくさ</span></div>" +
@@ -978,6 +1160,85 @@ function render() {
       '<div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">' +
         '<button class="btn big" data-action="play" data-arg="' + esc(r.catId) + '">もういちど!</button>' +
         '<button class="btn big yellow" data-action="gohome">べつの さくひん</button>' +
+      "</div>" +
+    "</div>";
+  }
+
+  /* ===== きょうだい たいけつ:せってい ===== */
+  else if (S.screen === "battle-setup") {
+    const p1cands = S.players;
+    const p2cands = S.players.filter(p => p.id !== S.battleP1);
+    app.innerHTML = '<div class="card">' +
+      '<p class="center" style="font-weight:700; font-size:17px;">⚔️ きょうだい たいけつ!</p>' +
+      (S.players.length < 2
+        ? '<p class="empty-note">たいけつには 2にん いじょう とうろくが ひつようだよ。<br>「だれが あそぶ?」がめんで ついかしてね!</p>'
+        : '<p class="section-label">👤 ひとりめ</p>' +
+          '<div class="player-grid">' +
+            p1cands.map(p =>
+              '<button class="player-item" data-action="battlep1" data-arg="' + esc(p.id) + '" style="' +
+              (S.battleP1 === p.id ? "border-color:#FF7BAC; background:#FFF0F6;" : "") + '">' +
+              '<div class="avatar">' + avatarDisplay(p) + "</div><div class=\"pname\">" + esc(p.name) + "</div></button>"
+            ).join("") +
+          "</div>" +
+          '<p class="section-label">👤 ふたりめ</p>' +
+          '<div class="player-grid">' +
+            (p2cands.length
+              ? p2cands.map(p =>
+                  '<button class="player-item" data-action="battlep2" data-arg="' + esc(p.id) + '" style="' +
+                  (S.battleP2 === p.id ? "border-color:#FF7BAC; background:#FFF0F6;" : "") + '">' +
+                  '<div class="avatar">' + avatarDisplay(p) + "</div><div class=\"pname\">" + esc(p.name) + "</div></button>"
+                ).join("")
+              : '<p class="empty-note">さきに ひとりめを えらんでね</p>') +
+          "</div>" +
+          '<p class="section-label">📖 さくひん</p>' +
+          '<div class="cat-chips">' +
+            S.cats.filter(c => c.words.length > 0).map(c =>
+              '<button class="cat-chip' + (S.battleCat === c.id ? " active" : "") + '" data-action="battlecat" data-arg="' + esc(c.id) + '">' +
+              esc(c.emoji) + " " + esc(c.name) + "</button>"
+            ).join("") +
+          "</div>" +
+          (S.battleP1 && S.battleP2 && S.battleCat
+            ? '<div class="center" style="margin-top:16px;"><button class="btn big" data-action="battlestart">⚔️ たいけつ スタート!</button></div>'
+            : '<p class="hint">ふたりと あそぶ さくひんを えらんでね</p>')
+      ) +
+      '<div class="center" style="margin-top:10px;"><button class="btn ghost" data-action="gohome">🏠 もどる</button></div>' +
+    "</div>";
+  }
+
+  /* ===== きょうだい たいけつ:こうたい ===== */
+  else if (S.screen === "battle-handoff" && S.battle) {
+    const p2 = S.players.find(x => x.id === S.battle.p2);
+    app.innerHTML = '<div class="card center">' +
+      '<p style="font-weight:700; font-size:15px; color:#8A7BA0;">1にんめ おつかれさま!</p>' +
+      '<h2 style="font-size:22px; font-weight:900; margin:10px 0;">つぎは ' + avatarDisplay(p2) + " " + esc(p2.name) + " の ばん!</h2>" +
+      '<p class="hint">じゅんびが できたら おしてね</p>' +
+      '<button class="btn big" data-action="battlestage2" style="margin-top:14px;">▶️ スタート</button>' +
+    "</div>";
+  }
+
+  /* ===== きょうだい たいけつ:けっか ===== */
+  else if (S.screen === "battle-result" && S.battle && S.battle.res2) {
+    const b = S.battle;
+    const p1 = S.players.find(x => x.id === b.p1), p2 = S.players.find(x => x.id === b.p2);
+    const r1 = b.res1, r2 = b.res2;
+    let winner = null;
+    if (r1.sec !== r2.sec) winner = r1.sec < r2.sec ? p1 : p2;
+    else if (r1.acc !== r2.acc) winner = r1.acc > r2.acc ? p1 : p2;
+    const box = (p, r) =>
+      '<div class="box" style="min-width:130px;">' +
+        '<div style="font-size:24px;">' + avatarDisplay(p) + "</div>" +
+        '<b style="font-size:16px;">' + esc(p.name) + "</b>" +
+        '<div style="font-size:13px; margin-top:6px;">⏱️ ' + r.sec + "びょう<br>🎯 " + r.acc + "%<br>💦 ミス " + r.misses + "</div>" +
+      "</div>";
+    app.innerHTML = '<div class="card center">' +
+      '<h2 style="font-size:20px; font-weight:900;">⚔️ たいけつ けっか</h2>' +
+      '<div class="result-grid" style="margin-top:16px;">' + box(p1, r1) + box(p2, r2) + "</div>" +
+      '<p style="font-weight:900; font-size:19px; margin:14px 0;">' +
+        (winner ? "🏆 " + avatarDisplay(winner) + " " + esc(winner.name) + " の かち!" : "🤝 ひきわけ!") +
+      "</p>" +
+      '<div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">' +
+        '<button class="btn big" data-action="battlesetup">もういちど たいけつ</button>' +
+        '<button class="btn big yellow" data-action="gohome">🏠 もどる</button>' +
       "</div>" +
     "</div>";
   }
@@ -1280,6 +1541,19 @@ app.addEventListener("click", e => {
     if (S.gasUrl) syncMerge(true);
   }
   else if (action === "syncnow") syncMerge(true);
+  else if (action === "equipacc") {
+    if (!S.currentPlayer) return;
+    const st = statsOf(S.currentPlayer.id);
+    st.equipped = st.equipped === arg ? null : arg;
+    saveRecords();
+    render();
+  }
+  else if (action === "battlesetup") { S.battleP1 = null; S.battleP2 = null; S.battleCat = null; S.battle = null; go("battle-setup"); }
+  else if (action === "battlep1") { S.battleP1 = arg; if (S.battleP2 === arg) S.battleP2 = null; render(); }
+  else if (action === "battlep2") { S.battleP2 = arg; render(); }
+  else if (action === "battlecat") { S.battleCat = arg; render(); }
+  else if (action === "battlestart") startBattle();
+  else if (action === "battlestage2") startBattleStage(2);
   else if (action === "delword") {
     const cat = catById(S.editCatId);
     if (!cat) return;
